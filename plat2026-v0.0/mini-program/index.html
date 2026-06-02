@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>小程序 DEMO</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --line: #e6ebf2;
+      --text: #102033;
+      --muted: #6c7d93;
+      --brand: #1f8fff;
+      --brand-2: #13c2c2;
+      --warn: #ffb84d;
+      --danger: #ff6b77;
+      --success: #16c784;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at top left, rgba(31, 143, 255, 0.12), transparent 30%),
+        linear-gradient(180deg, #f6f9fc, #eef4fb 60%, #f7fbff);
+      font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+      color: var(--text);
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+    }
+
+    .miniapp {
+      width: min(390px, 100%);
+      border-radius: 30px;
+      background: #fff;
+      border: 1px solid var(--line);
+      box-shadow: 0 20px 60px rgba(15, 43, 74, 0.12);
+      overflow: hidden;
+    }
+
+    .header {
+      padding: 18px 18px 14px;
+      background: linear-gradient(135deg, rgba(31, 143, 255, 0.08), rgba(19, 194, 194, 0.08));
+    }
+
+    .title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.2;
+    }
+
+    .subtle {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      padding: 16px 18px 0;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 14px;
+      background: var(--panel);
+    }
+
+    .label {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .value {
+      margin-top: 8px;
+      font-size: 24px;
+      font-weight: 800;
+    }
+
+    .section {
+      padding: 16px 18px 0;
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .badge {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(31, 143, 255, 0.1);
+      color: var(--brand);
+    }
+
+    .list-item {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 12px 14px;
+      margin-bottom: 10px;
+      background: var(--panel);
+    }
+
+    .row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .status {
+      font-size: 12px;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 999px;
+    }
+
+    .ok { background: rgba(22, 199, 132, 0.12); color: var(--success); }
+    .warn { background: rgba(255, 184, 77, 0.16); color: #d68b00; }
+    .danger { background: rgba(255, 107, 119, 0.14); color: var(--danger); }
+
+    .quick {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      padding: 16px 18px;
+    }
+
+    .quick button {
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 16px;
+      padding: 12px 8px;
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    .nav {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      padding: 0 14px 14px;
+    }
+
+    .nav button {
+      border: 0;
+      background: #f2f6fb;
+      color: var(--muted);
+      border-radius: 14px;
+      padding: 10px 8px;
+      font-size: 12px;
+    }
+
+    .nav button.active {
+      color: #fff;
+      background: linear-gradient(135deg, var(--brand), var(--brand-2));
+      font-weight: 700;
+    }
+
+    .footer {
+      padding: 0 18px 18px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .page { display: none; }
+    .page.active { display: block; }
+  </style>
+</head>
+<body>
+  <div class="miniapp">
+    <div class="header">
+      <div class="title">
+        <span>WeChat Mini Program</span>
+        <span>DEMO</span>
+      </div>
+      <h1>设备状态轻量查看</h1>
+      <div class="subtle">适合领导查看、扫码绑定、告警提醒和趋势概览，突出小程序的低门槛访问能力。</div>
+    </div>
+
+    <div class="page active" data-page="home">
+      <div class="grid">
+        <div class="card"><div class="label">在线设备</div><div id="miniOnlineCount" class="value">128</div></div>
+        <div class="card"><div class="label">今日告警</div><div id="miniAlarmCount" class="value" style="color: var(--danger);">17</div></div>
+        <div class="card"><div class="label">正常率</div><div id="miniUptimeRate" class="value" style="color: var(--success);">98%</div></div>
+        <div class="card"><div class="label">离线数</div><div id="miniOfflineCount" class="value" style="color: var(--warn);">3</div></div>
+      </div>
+      <div class="section">
+        <div class="section-header"><strong>快速入口</strong><span class="badge">扫码 / 告警 / 趋势</span></div>
+      </div>
+      <div class="quick">
+        <button>扫码绑定</button>
+        <button>告警中心</button>
+        <button>趋势图表</button>
+      </div>
+    </div>
+
+    <div class="page" data-page="device">
+      <div class="section">
+        <div class="section-header"><strong>设备状态</strong><span class="badge">实时</span></div>
+        <div id="miniDeviceList"></div>
+      </div>
+    </div>
+
+    <div class="page" data-page="alarm">
+      <div class="section">
+        <div class="section-header"><strong>告警列表</strong><span class="badge">待确认</span></div>
+        <div id="miniAlarmList"></div>
+      </div>
+    </div>
+
+    <div class="page" data-page="mine">
+      <div class="section">
+        <div class="section-header"><strong>我的巡检</strong><span class="badge">今日 12 项</span></div>
+        <div class="list-item">
+          <div class="row"><strong>已完成</strong><span class="status ok">9</span></div>
+          <div class="subtle">包含拍照、备注、复核和离线补录。</div>
+        </div>
+        <div class="list-item">
+          <div class="row"><strong>待处理</strong><span class="status warn">3</span></div>
+          <div class="subtle">可结合工单与消息推送做闭环。</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="nav">
+      <button class="active" data-nav="home">首页</button>
+      <button data-nav="device">设备</button>
+      <button data-nav="alarm">告警</button>
+      <button data-nav="mine">我的</button>
+    </div>
+
+    <div class="footer">小程序 DEMO 页面，重点展示轻量查看、扫码和告警订阅能力。</div>
+  </div>
+
+  <script>
+    const navButtons = Array.from(document.querySelectorAll('[data-nav]'));
+    const pages = Array.from(document.querySelectorAll('[data-page]'));
+
+    function renderStatus(status) {
+      if (status === 'online') {
+        return '<span class="status ok">在线</span>';
+      }
+
+      if (status === 'alarm') {
+        return '<span class="status warn">波动</span>';
+      }
+
+      return '<span class="status danger">离线</span>';
+    }
+
+    function renderAlarmLevel(level) {
+      if (level === 'critical') {
+        return '<span class="status danger">严重</span>';
+      }
+
+      return '<span class="status warn">一般</span>';
+    }
+
+    function renderDeviceList(devices) {
+      const container = document.getElementById('miniDeviceList');
+      container.innerHTML = devices.map((item) => `
+        <div class="list-item">
+          <div class="row"><strong>${item.name}</strong>${renderStatus(item.status)}</div>
+          <div class="subtle">${item.protocol} | 网关 ${item.gatewayId} | ${item.location}</div>
+        </div>
+      `).join('');
+    }
+
+    function renderAlarmList(alarms, devices) {
+      const container = document.getElementById('miniAlarmList');
+      container.innerHTML = alarms.map((item) => {
+        const source = devices.find((device) => device.id === item.sourceId);
+        const sourceName = source ? source.name : item.sourceId;
+        return `
+          <div class="list-item">
+            <div class="row"><strong>${item.message}</strong>${renderAlarmLevel(item.level)}</div>
+            <div class="subtle">${sourceName} | ${item.status} | ${item.createdAt}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function loadMiniProgramData() {
+      try {
+        const response = await fetch('/api/dashboard');
+        if (!response.ok) {
+          throw new Error('Failed to load mini program data');
+        }
+
+        const data = await response.json();
+        const summary = data.summary || {};
+        const devices = Array.isArray(data.devices) ? data.devices : [];
+        const alarms = Array.isArray(data.alarms) ? data.alarms : [];
+
+        document.getElementById('miniOnlineCount').textContent = String(devices.filter((item) => item.status !== 'offline').length);
+        document.getElementById('miniAlarmCount').textContent = String(alarms.length);
+        document.getElementById('miniUptimeRate').textContent = `${summary.uptimeRate ?? 98}%`;
+        document.getElementById('miniOfflineCount').textContent = String(devices.filter((item) => item.status === 'offline').length);
+
+        renderDeviceList(devices);
+        renderAlarmList(alarms, devices);
+      } catch (error) {
+        console.warn('Mini program data load failed, keep static demo values.', error);
+      }
+    }
+
+    navButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        const page = button.dataset.nav;
+        navButtons.forEach((item) => item.classList.toggle('active', item === button));
+        pages.forEach((item) => item.classList.toggle('active', item.dataset.page === page));
+      });
+    });
+
+    loadMiniProgramData();
+  </script>
+</body>
+</html>

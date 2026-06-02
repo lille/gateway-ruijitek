@@ -1,0 +1,135 @@
+{
+  "summary": {
+    "gatewayCount": 128,
+    "pointCount": 4680,
+    "alarmCount": 17,
+    "uptimeRate": 98,
+    "reportInterval": "1s"
+  },
+  "monitorCategories": [
+    { "name": "空气监测", "count": 34 },
+    { "name": "水位监测", "count": 28 },
+    { "name": "气体监测", "count": 36 },
+    { "name": "视频监测", "count": 30 }
+  ],
+  "monitorRows": [
+    { "device": "A区空气监测站-01", "status": "正常", "temperature": 24.8, "humidity": 56, "pm25": 18, "pm10": 24, "co2": 498, "formaldehyde": 0.03 },
+    { "device": "B区水位监测站-02", "status": "正常", "temperature": 23.6, "humidity": 61, "pm25": 20, "pm10": 27, "co2": 512, "formaldehyde": 0.04 },
+    { "device": "C区气体监测站-03", "status": "预警", "temperature": 26.1, "humidity": 58, "pm25": 26, "pm10": 31, "co2": 588, "formaldehyde": 0.07 },
+    { "device": "D区视频监测站-04", "status": "离线", "temperature": "-", "humidity": "-", "pm25": "-", "pm10": "-", "co2": "-", "formaldehyde": "-" }
+  ],
+  "gateways": [
+    {
+      "id": "GW-1001",
+      "name": "南区 DTU-01",
+      "mode": "dtu-pass-through",
+      "protocolList": ["raw-pass-through"],
+      "status": "online",
+      "lastSeenAt": "2026-04-23T10:12:30+08:00"
+    },
+    {
+      "id": "GW-1008",
+      "name": "北区协议网关-08",
+      "mode": "protocol-collect",
+      "protocolList": ["modbus-485", "modbus-tcp", "tcp-socket", "plc", "serial"],
+      "status": "online",
+      "lastSeenAt": "2026-04-23T10:12:24+08:00"
+    },
+    {
+      "id": "GW-1012",
+      "name": "测试网关-12",
+      "mode": "protocol-collect",
+      "protocolList": ["modbus-485", "serial"],
+      "status": "upgrading",
+      "lastSeenAt": "2026-04-23T10:10:02+08:00"
+    }
+  ],
+  "devices": [
+    {
+      "id": "DEV-2001",
+      "name": "注塑机-01",
+      "type": "machine",
+      "location": "一号车间",
+      "status": "online",
+      "gatewayId": "GW-1001",
+      "lastValue": 91.2,
+      "protocol": "modbus-485"
+    },
+    {
+      "id": "DEV-2002",
+      "name": "空压机-02",
+      "type": "compressor",
+      "location": "二号车间",
+      "status": "alarm",
+      "gatewayId": "GW-1001",
+      "lastValue": 1.62,
+      "protocol": "tcp-socket"
+    },
+    {
+      "id": "DEV-2007",
+      "name": "泵站-07",
+      "type": "pump",
+      "location": "泵房",
+      "status": "offline",
+      "gatewayId": "GW-1008",
+      "lastValue": null,
+      "protocol": "plc"
+    }
+  ],
+  "realtime": {
+    "DEV-2001": [
+      { "code": "temp", "name": "温度", "unit": "C", "value": 91.2, "quality": "bad" },
+      { "code": "pressure", "name": "压力", "unit": "MPa", "value": 1.82, "quality": "good" },
+      { "code": "speed", "name": "转速", "unit": "rpm", "value": 1540, "quality": "good" }
+    ],
+    "DEV-2002": [
+      { "code": "temp", "name": "温度", "unit": "C", "value": 33.4, "quality": "good" },
+      { "code": "pressure", "name": "压力", "unit": "MPa", "value": 1.62, "quality": "good" }
+    ],
+    "DEV-2007": [
+      { "code": "status", "name": "状态", "unit": "bool", "value": 0, "quality": "bad" }
+    ]
+  },
+  "history": {
+    "temp": [
+      { "time": "10:00", "value": 84.6 },
+      { "time": "10:05", "value": 86.3 },
+      { "time": "10:10", "value": 88.9 },
+      { "time": "10:15", "value": 90.2 },
+      { "time": "10:20", "value": 91.2 }
+    ],
+    "pressure": [
+      { "time": "10:00", "value": 1.54 },
+      { "time": "10:05", "value": 1.58 },
+      { "time": "10:10", "value": 1.63 },
+      { "time": "10:15", "value": 1.71 },
+      { "time": "10:20", "value": 1.82 }
+    ]
+  },
+  "alarms": [
+    {
+      "id": "ALM-9001",
+      "level": "critical",
+      "sourceId": "DEV-2001",
+      "message": "温度超限",
+      "status": "new",
+      "createdAt": "2026-04-23T10:12:30+08:00"
+    },
+    {
+      "id": "ALM-9002",
+      "level": "warning",
+      "sourceId": "GW-1001",
+      "message": "DTU 透传链路抖动",
+      "status": "confirmed",
+      "createdAt": "2026-04-23T10:09:11+08:00"
+    },
+    {
+      "id": "ALM-9003",
+      "level": "warning",
+      "sourceId": "DEV-2007",
+      "message": "设备离线超过 5 分钟",
+      "status": "new",
+      "createdAt": "2026-04-23T10:03:47+08:00"
+    }
+  ]
+}
