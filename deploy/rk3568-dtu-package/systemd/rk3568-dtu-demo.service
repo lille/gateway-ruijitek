@@ -1,0 +1,14 @@
+[Unit]
+Description=RK3568 DTU Demo Service
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/rk3568-dtu-demo
+ExecStart=/opt/rk3568-dtu-demo/scripts/start.sh
+Restart=always
+RestartSec=3
+User=root
+
+[Install]
+WantedBy=multi-user.target
