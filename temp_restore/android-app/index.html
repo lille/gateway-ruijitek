@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Android App DEMO</title>
+  <style>
+    :root {
+      --bg: #07111f;
+      --panel: rgba(14, 26, 45, 0.88);
+      --panel-2: rgba(18, 34, 58, 0.96);
+      --line: rgba(137, 194, 255, 0.16);
+      --text: #eaf2ff;
+      --muted: #8ea8c8;
+      --brand: #3dd6d0;
+      --brand-2: #7c5cff;
+      --warn: #ffb84d;
+      --danger: #ff6b77;
+      --success: #5fe39a;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+      background:
+        radial-gradient(circle at 10% 20%, rgba(61, 214, 208, 0.14), transparent 26%),
+        radial-gradient(circle at 90% 10%, rgba(124, 92, 255, 0.15), transparent 24%),
+        linear-gradient(180deg, #07111f, #091427 50%, #07111f);
+      color: var(--text);
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+
+    .phone {
+      width: min(420px, 100%);
+      border-radius: 36px;
+      padding: 16px;
+      background: linear-gradient(180deg, rgba(14, 26, 45, 0.98), rgba(8, 16, 28, 0.98));
+      border: 1px solid var(--line);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+    }
+
+    .screen {
+      border-radius: 28px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+      border: 1px solid rgba(255,255,255,0.08);
+      padding: 18px;
+      min-height: 780px;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .brand {
+      font-weight: 800;
+      letter-spacing: 0.04em;
+    }
+
+    h1 {
+      margin: 8px 0 6px;
+      font-size: 26px;
+      line-height: 1.15;
+    }
+
+    .subtle {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin: 18px 0;
+    }
+
+    .card {
+      border-radius: 18px;
+      padding: 14px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .card .label {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .card .value {
+      font-size: 24px;
+      font-weight: 800;
+      margin-top: 6px;
+    }
+
+    .section {
+      margin-top: 14px;
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .badge {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(61, 214, 208, 0.12);
+      color: #bffbf7;
+    }
+
+    .device,
+    .alarm {
+      border-radius: 18px;
+      padding: 14px;
+      margin-bottom: 10px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .status {
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-weight: 700;
+    }
+
+    .ok { background: rgba(95, 227, 154, 0.16); color: #bdfad5; }
+    .warn { background: rgba(255, 184, 77, 0.16); color: #ffe0a9; }
+    .danger { background: rgba(255, 107, 119, 0.16); color: #ffc1c7; }
+
+    .tabs {
+      position: sticky;
+      bottom: 0;
+      margin-top: 16px;
+      padding-top: 8px;
+      background: linear-gradient(180deg, transparent, rgba(8,16,28,0.9) 24%);
+    }
+
+    .tabbar {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+      padding: 8px;
+      border-radius: 18px;
+    }
+
+    .tab {
+      border: 0;
+      border-radius: 14px;
+      padding: 10px 8px;
+      color: var(--muted);
+      background: transparent;
+      font-size: 12px;
+    }
+
+    .tab.active {
+      color: #06101d;
+      background: linear-gradient(135deg, var(--brand), #a7f6d0);
+      font-weight: 700;
+    }
+
+    .view { display: none; }
+    .view.active { display: block; }
+
+    .trend {
+      height: 120px;
+      border-radius: 18px;
+      background:
+        linear-gradient(180deg, rgba(61,214,208,0.15), rgba(61,214,208,0.02)),
+        repeating-linear-gradient(90deg, rgba(255,255,255,0.06) 0 1px, transparent 1px 28px),
+        repeating-linear-gradient(180deg, rgba(255,255,255,0.06) 0 1px, transparent 1px 24px);
+      position: relative;
+      overflow: hidden;
+      margin-top: 10px;
+    }
+
+    .trend::after {
+      content: "";
+      position: absolute;
+      inset: 18px 14px 18px 14px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(61,214,208,0.85), rgba(124,92,255,0.85));
+      clip-path: polygon(0 72%, 11% 66%, 19% 52%, 28% 56%, 39% 28%, 50% 36%, 58% 30%, 66% 48%, 77% 34%, 86% 48%, 100% 22%, 100% 100%, 0 100%);
+      opacity: 0.86;
+    }
+
+    .footer {
+      margin-top: 16px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <div class="screen">
+      <div class="topbar">
+        <span>09:41</span>
+        <span class="brand">Gateway App</span>
+        <span>5G 92%</span>
+      </div>
+
+      <div class="view active" data-view="home">
+        <span class="badge">Android App DEMO</span>
+        <h1>巡检、告警、实时数据一屏查看</h1>
+        <p class="subtle">用于展示工业数据采集平台的移动端能力，适合值班、巡检和远程查看。</p>
+
+        <div class="stats">
+          <div class="card">
+            <div class="label">在线设备</div>
+            <div id="androidOnlineCount" class="value">128</div>
+          </div>
+          <div class="card">
+            <div class="label">待处理告警</div>
+            <div id="androidAlarmCount" class="value" style="color: var(--danger);">5</div>
+          </div>
+          <div class="card">
+            <div class="label">异常点位</div>
+            <div id="androidPointAlertCount" class="value" style="color: var(--warn);">17</div>
+          </div>
+          <div class="card">
+            <div class="label">正常率</div>
+            <div id="androidUptimeRate" class="value" style="color: var(--success);">98%</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-header">
+            <strong>实时趋势</strong>
+            <span class="badge">last 24h</span>
+          </div>
+          <div class="trend"></div>
+        </div>
+      </div>
+
+      <div class="view" data-view="devices">
+        <span class="badge">设备列表</span>
+        <h1>设备状态总览</h1>
+        <div id="deviceList"></div>
+      </div>
+
+      <div class="view" data-view="alarms">
+        <span class="badge">告警中心</span>
+        <h1>重点告警待确认</h1>
+        <div id="alarmList"></div>
+      </div>
+
+      <div class="view" data-view="profile">
+        <span class="badge">巡检任务</span>
+        <h1>今日巡检 12 项</h1>
+        <div class="device">
+          <div class="row"><strong>已完成</strong><span class="status ok">9</span></div>
+          <div class="subtle">扫码确认、状态拍照、异常备注、离线补录。</div>
+        </div>
+        <div class="device">
+          <div class="row"><strong>待处理</strong><span class="status warn">3</span></div>
+          <div class="subtle">建议结合离线告警推送和工单流程。</div>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <div class="tabbar">
+          <button class="tab active" data-tab="home">首页</button>
+          <button class="tab" data-tab="devices">设备</button>
+          <button class="tab" data-tab="alarms">告警</button>
+          <button class="tab" data-tab="profile">巡检</button>
+        </div>
+      </div>
+
+      <div class="footer">该页面是移动端 DEMO 原型，用来演示 Android App 的交互布局与数据承载方式。</div>
+    </div>
+  </div>
+
+  <script>
+    const tabs = Array.from(document.querySelectorAll('.tab'));
+    const views = Array.from(document.querySelectorAll('.view'));
+
+    function formatStatus(status) {
+      if (status === 'online') {
+        return '<span class="status ok">在线</span>';
+      }
+
+      if (status === 'alarm') {
+        return '<span class="status warn">告警</span>';
+      }
+
+      return '<span class="status danger">离线</span>';
+    }
+
+    function formatAlarmStatus(level) {
+      if (level === 'critical') {
+        return '<span class="status danger">严重</span>';
+      }
+
+      return '<span class="status warn">一般</span>';
+    }
+
+    function renderDeviceList(devices) {
+      const container = document.getElementById('deviceList');
+      container.innerHTML = devices.map((item) => `
+        <div class="device">
+          <div class="row"><strong>${item.name}</strong>${formatStatus(item.status)}</div>
+          <div class="subtle">网关：${item.gatewayId} | 协议：${item.protocol} | 位置：${item.location}</div>
+        </div>
+      `).join('');
+    }
+
+    function renderAlarmList(alarms, devices) {
+      const container = document.getElementById('alarmList');
+      container.innerHTML = alarms.map((item) => {
+        const source = devices.find((device) => device.id === item.sourceId);
+        const sourceName = source ? source.name : item.sourceId;
+        return `
+          <div class="alarm">
+            <div class="row"><strong>${item.message}</strong>${formatAlarmStatus(item.level)}</div>
+            <div class="subtle">设备：${sourceName} | 状态：${item.status} | 时间：${item.createdAt}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function loadMobileData() {
+      try {
+        const response = await fetch('/api/dashboard');
+        if (!response.ok) {
+          throw new Error('Failed to load mobile dashboard');
+        }
+
+        const data = await response.json();
+        const summary = data.summary || {};
+        const devices = Array.isArray(data.devices) ? data.devices : [];
+        const alarms = Array.isArray(data.alarms) ? data.alarms : [];
+
+        document.getElementById('androidOnlineCount').textContent = String(devices.filter((item) => item.status !== 'offline').length);
+        document.getElementById('androidAlarmCount').textContent = String(alarms.filter((item) => item.status === 'new').length);
+        document.getElementById('androidPointAlertCount').textContent = String(alarms.length);
+        document.getElementById('androidUptimeRate').textContent = `${summary.uptimeRate ?? 98}%`;
+
+        renderDeviceList(devices);
+        renderAlarmList(alarms, devices);
+      } catch (error) {
+        console.warn('Mobile data load failed, keep static demo values.', error);
+      }
+    }
+
+    tabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const key = tab.dataset.tab;
+        tabs.forEach((item) => item.classList.toggle('active', item === tab));
+        views.forEach((view) => view.classList.toggle('active', view.dataset.view === key));
+      });
+    });
+
+    loadMobileData();
+  </script>
+</body>
+</html>

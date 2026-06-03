@@ -1,0 +1,10 @@
+{
+  "name": "gateway-dev-plat2026-demo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Industrial data acquisition cloud platform demo with mock API and static previews.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
