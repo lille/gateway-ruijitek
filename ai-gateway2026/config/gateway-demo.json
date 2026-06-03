@@ -1,0 +1,85 @@
+{
+  "bindAddress": "0.0.0.0",
+  "httpPort": 8090,
+  "dtuListenPort": 15020,
+  "refreshIntervalMs": 1000,
+  "gateways": [
+    {
+      "id": "GW-DTU-01",
+      "name": "DTU 透传采集网关",
+      "mode": "DTU透传",
+      "protocolList": ["DTU", "TCP Socket"]
+    },
+    {
+      "id": "GW-FE-01",
+      "name": "前端协议采集网关",
+      "mode": "协议采集",
+      "protocolList": ["MODBUS 485", "MODBUS TCP", "PLC", "TCP Socket", "Serial"]
+    }
+  ],
+  "devices": [
+    {
+      "id": "DEV-2001",
+      "name": "ZH-Q006 空气质量传感器",
+      "gatewayId": "GW-FE-01",
+      "templateName": "ZH-Q006",
+      "protocol": "modbus-rtu",
+      "location": "现场A区",
+      "intervalMs": 1000,
+      "slaveId": 1,
+      "startAddress": 0,
+      "registerCount": 9,
+      "baseTemperature": 24.6,
+      "baseHumidity": 58.0,
+      "alarmThresholds": {
+        "pm25": { "warning": 75, "critical": 150 },
+        "co2": { "warning": 1000, "critical": 2000 },
+        "tvoc": { "warning": 600, "critical": 1000 },
+        "formaldehyde": { "warning": 100, "critical": 200 },
+        "temperature": { "warning": 32, "critical": 38 }
+      },
+      "serial": {
+        "simulate": true,
+        "port": "auto",
+        "baudRate": 9600,
+        "dataBits": 8,
+        "stopBits": 1,
+        "parity": "N"
+      }
+    },
+    {
+      "id": "DEV-2002",
+      "name": "注塑机 PLC 采集点",
+      "gatewayId": "GW-FE-01",
+      "protocol": "plc",
+      "location": "车间B区",
+      "intervalMs": 1000,
+      "slaveId": 1,
+      "startAddress": 0,
+      "registerCount": 2,
+      "baseTemperature": 26.2,
+      "baseHumidity": 49.0,
+      "tcp": {
+        "simulate": true,
+        "host": "192.168.10.30",
+        "port": 502
+      }
+    },
+    {
+      "id": "DEV-2003",
+      "name": "Socket 环境采集器",
+      "gatewayId": "GW-DTU-01",
+      "protocol": "tcp-socket",
+      "location": "仓储C区",
+      "intervalMs": 1000,
+      "baseTemperature": 23.4,
+      "baseHumidity": 61.0,
+      "tcp": {
+        "simulate": true,
+        "host": "127.0.0.1",
+        "port": 9000,
+        "request": "READ\n"
+      }
+    }
+  ]
+}

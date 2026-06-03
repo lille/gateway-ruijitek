@@ -1,0 +1,32 @@
+{
+    "baseHumidity": 60,
+    "baseTemperature": 25,
+    "deploy": {
+        "generatedBy": "pc-dtu-config-tool",
+        "packageDir": "D:/project/gateway-dev/ai-gateway2026/deploy/rk3568-dtu-package",
+        "targetBoard": "RK3568",
+        "templateName": "温湿度传感器(默认)"
+    },
+    "deviceId": "DEV-DTU-01",
+    "deviceName": "RS485 温湿度传感器",
+    "gatewayId": "GW-DTU-01",
+    "gatewayName": "DTU 透传终端",
+    "intervalMs": 1000,
+    "location": "RK3568 现场终端",
+    "mode": "modbus-rtu",
+    "registerCount": 2,
+    "serial": {
+        "baudRate": 9600,
+        "dataBits": 8,
+        "parity": "N",
+        "port": "auto",
+        "simulate": false,
+        "stopBits": 1
+    },
+    "server": {
+        "host": "127.0.0.1",
+        "port": 15020
+    },
+    "slaveId": 1,
+    "startAddress": 0
+}
