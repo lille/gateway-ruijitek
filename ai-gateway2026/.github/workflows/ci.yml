@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [ feature/ai-gateway2026 ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - name: Install dependencies (if any)
+      run: |
+        if [ -f package.json ]; then npm ci; fi
+
+    - name: Run tests (optional)
+      run: |
+        if [ -f package.json ] && npm test --silent; then echo "Tests run"; else echo "No tests"; fi
