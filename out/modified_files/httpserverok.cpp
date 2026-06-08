@@ -805,50 +805,6 @@ QByteArray HttpServer::relayControlHtml() const
         });
 
         const sep = document.createElement('hr'); sep.style.margin='12px 0'; listEl.appendChild(sep);
-        // 干节点继电器（按产品手册映射）
-        const dryOnboard = [
-          { id: '496', label: '继电器0 (NO_OUT0 / ID: 496)' },
-          { id: '498', label: '继电器1 (NO_OUT1 / ID: 498)' },
-          { id: '497', label: '继电器2 (NO_OUT2 / ID: 497)' },
-          { id: '499', label: '继电器3 (NO_OUT3 / ID: 499)' }
-        ];
-        const hDry = document.createElement('h3'); hDry.textContent = '干节点继电器'; hDry.style.margin='8px 0';
-        listEl.appendChild(hDry);
-        dryOnboard.forEach(r => {
-          const row = mkRow(r.id);
-          row.querySelector('.id').textContent = `${r.label} — ID: ${r.id}`;
-          listEl.appendChild(row);
-        });
-        const sep2 = document.createElement('hr'); sep2.style.margin='12px 0'; listEl.appendChild(sep2);
-
-        // DI 输入（16 路）
-        const diList = [
-          { id: '480', label: 'IN0' },{ id: '481', label: 'IN1' },{ id: '482', label: 'IN2' },{ id: '483', label: 'IN3' },
-          { id: '484', label: 'IN4' },{ id: '485', label: 'IN5' },{ id: '486', label: 'IN6' },{ id: '487', label: 'IN7' },
-          { id: '488', label: 'IN8' },{ id: '489', label: 'IN9' },{ id: '490', label: 'IN10' },{ id: '491', label: 'IN11' },
-          { id: '492', label: 'IN12' },{ id: '493', label: 'IN13' },{ id: '494', label: 'IN14' },{ id: '495', label: 'IN15' }
-        ];
-        const hDi = document.createElement('h3'); hDi.textContent = '数字输入 DI'; hDi.style.margin='8px 0';
-        listEl.appendChild(hDi);
-        diList.forEach(d => {
-          const row = document.createElement('div'); row.className='row';
-          const idSpan = document.createElement('div'); idSpan.className='id'; idSpan.textContent = `${d.label} — ID: ${d.id}`;
-          const btn = document.createElement('button'); btn.textContent = '读取';
-          const stateSpan = document.createElement('div'); stateSpan.className='small'; stateSpan.textContent = '状态：未知';
-          btn.addEventListener('click', async ()=>{
-            btn.disabled = true; btn.textContent = '读取中...';
-            try{
-              const res = await fetch('/api/debug-gateway-latest');
-              const js = await res.json();
-              const s = JSON.stringify(js || {});
-              if (s.indexOf(d.id) !== -1) stateSpan.textContent = '状态：触发';
-              else stateSpan.textContent = '状态：未触发';
-            }catch(e){ stateSpan.textContent = '状态：读取失败'; }
-            finally{ btn.disabled = false; btn.textContent = '读取'; }
-          });
-          row.appendChild(idSpan); row.appendChild(btn); row.appendChild(stateSpan);
-          listEl.appendChild(row);
-        });
 
         // 继续加载已知设备作为示例；尝试从网关（如果设置了 gatewayBase），否则使用本地 demo
         const devicesUrl = buildUrl('/api/devices');

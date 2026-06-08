@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>继电器控制</title>
+  <style>
+    body{font-family:Segoe UI,system-ui,Microsoft YaHei,sans-serif;margin:20px;background:#f6f9fc;color:#0b2635}
+    h1{margin-bottom:12px}
+    .list{max-width:920px}
+    .row{display:flex;gap:8px;align-items:center;padding:8px;border:1px solid #e3edf3;border-radius:8px;margin-bottom:8px;background:#fff}
+    .id{width:220px;font-weight:700}
+    select{padding:6px;border-radius:6px}
+    button{padding:8px 12px;border-radius:8px;border:0;background:#0b84ff;color:#fff;cursor:pointer}
+    .small{padding:6px 8px;background:#e9f2ff;border-radius:6px;color:#0b2635}
+    #msg{margin-top:12px;color:#0b6b2e}
+  </style>
+</head>
+<body>
+  <h1>继电器控制面板</h1>
+  <p>从设备列表加载可用 ID，或在下方手动输入自定义指示灯/继电器 ID。</p>
+
+  <div style="margin-bottom:12px">
+    <label style="display:block;margin-bottom:6px;color:#6b8290">网关地址（示例 http://192.168.10.200:3010），留空使用本地 demo:</label>
+    <input id="gatewayUrl" placeholder="http://<gateway-ip>:<port>" style="padding:8px;border-radius:6px;border:1px solid #ccdbe6;width:420px;margin-right:8px" />
+    <button id="setGateway">连接</button>
+    <span id="currentTarget" style="margin-left:12px;color:#4b6572"></span>
+    <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+      <label style="color:#6b8290">访问模式：</label>
+      <select id="accessMode" style="padding:6px;border-radius:6px">
+        <option value="demo">本地 demo</option>
+        <option value="direct">直接访问网关</option>
+        <option value="proxy">走上位机代理（proxy）</option>
+      </select>
+      <input id="proxyToken" placeholder="Proxy token (用于 proxy 模式)" style="padding:6px;border-radius:6px;border:1px solid #ccdbe6;width:260px;display:none;margin-left:8px" />
+      <input id="proxySshKey" placeholder="SSH 私钥路径 (可选)" style="padding:6px;border-radius:6px;border:1px solid #ccdbe6;width:260px;display:none;margin-left:8px" />
+    </div>
+  </div>
+
+  <div style="margin-bottom:12px">
+    <input id="customId" placeholder="输入自定义 ID，例如 LED-1" style="padding:8px;border-radius:6px;border:1px solid #ccdbe6;width:260px;margin-right:8px" />
+    <select id="customAction" style="padding:6px;border-radius:6px">
+      <option value="on">打开</option>
+      <option value="off">关闭</option>
+    </select>
+    <button id="customConfirm">确认</button>
+  </div>
+
+  <div class="list" id="list"></div>
+
+  <div id="msg"></div>
+
+  <script>
+    let gatewayBase = '';
+    let accessMode = 'demo'; // 'demo' | 'direct' | 'proxy'
+
+    function buildUrl(path){
+      if (accessMode === 'proxy') {
+        return '/api/relay/proxy';
+      }
+      if (accessMode === 'direct' && gatewayBase && gatewayBase.trim()){
+        return gatewayBase.replace(/\/$/, '') + path;
+      }
+      return path; // relative to current host (demo server)
+    }
+
+    function buildHeaders(){
+      const headers = { 'Content-Type': 'application/json' };
+      if (accessMode === 'proxy'){
+        const t = document.getElementById('proxyToken').value.trim();
+        if (t) headers['Authorization'] = 'Bearer ' + t;
+      }
+      return headers;
+    }
+
+    async function postRelay(id, action){
+      const target = buildUrl('/api/relay');
+      const res = await fetch(target, {
+        method: 'POST',
+        headers: buildHeaders(),
+        body: JSON.stringify({ id, action })
+      });
+      return res.json();
+    }
+
+    function mkRow(id){
+      const row = document.createElement('div'); row.className='row';
+      const idSpan = document.createElement('div'); idSpan.className='id'; idSpan.textContent = id;
+      const sel = document.createElement('select');
+      const onOpt = document.createElement('option'); onOpt.value='on'; onOpt.textContent='打开';
+      const offOpt = document.createElement('option'); offOpt.value='off'; offOpt.textContent='关闭';
+      sel.appendChild(onOpt); sel.appendChild(offOpt);
+      const btn = document.createElement('button'); btn.textContent='确认';
+      const stateSpan = document.createElement('div'); stateSpan.className='small'; stateSpan.textContent='状态：未知';
+      btn.addEventListener('click', async ()=>{
+        btn.disabled = true; btn.textContent='处理中...';
+        try{
+          const r = await postRelay(id, sel.value);
+          stateSpan.textContent = '状态：' + (r.state ? '打开' : '关闭');
+          showMsg(`操作成功：${id} -> ${r.action}`);
+        }catch(e){
+          showMsg('请求失败：' + (e && e.message));
+        }finally{ btn.disabled=false; btn.textContent='确认'; }
+      });
+
+      row.appendChild(idSpan); row.appendChild(sel); row.appendChild(btn); row.appendChild(stateSpan);
+      return row;
+    }
+
+    function showMsg(text){ const m = document.getElementById('msg'); m.textContent = text; setTimeout(()=>{ m.textContent = '' }, 4000); }
+
+    async function load(){
+      const listEl = document.getElementById('list'); listEl.innerHTML='';
+      try{
+        // 板载继电器（来自设备手册截图）
+        const onboard = [
+          { id: '500', label: '12V_OUT4 (继电器4, 引脚1)' },
+          { id: '502', label: '12V_OUT5 (继电器5, 引脚3)' },
+          { id: '503', label: '12V_OUT6 (继电器6, 引脚5)' },
+          { id: '501', label: '12V_OUT7 (继电器7, 引脚7)' }
+        ];
+
+        const h = document.createElement('h3'); h.textContent = '板载继电器'; h.style.margin='8px 0';
+        listEl.appendChild(h);
+        onboard.forEach(r => {
+          const row = mkRow(r.id);
+          row.querySelector('.id').textContent = `${r.label} — ID: ${r.id}`;
+          listEl.appendChild(row);
+        });
+
+        const sep = document.createElement('hr'); sep.style.margin='12px 0'; listEl.appendChild(sep);
+
+        // 继续加载已知设备作为示例；尝试从网关（如果设置了 gatewayBase），否则使用本地 demo
+        const devicesUrl = buildUrl('/api/devices');
+        const res = await fetch(devicesUrl);
+        const devices = await res.json();
+        const ids = devices.map(d=>d.id).slice(0,20);
+        // 同时加入几个示例 LED id
+        ids.push('LED-1','LED-2','LED-3');
+        const h2 = document.createElement('h3'); h2.textContent='设备示例 ID'; h2.style.margin='8px 0';
+        listEl.appendChild(h2);
+        ids.forEach(id => listEl.appendChild(mkRow(id)));
+      }catch(e){ showMsg('加载设备失败：' + (e && e.message)); }
+    }
+
+    document.getElementById('customConfirm').addEventListener('click', async ()=>{
+      const id = document.getElementById('customId').value.trim();
+      const action = document.getElementById('customAction').value;
+      if(!id){ showMsg('请输入 ID'); return; }
+      try{
+        const r = await postRelay(id, action);
+        showMsg(`操作成功：${id} -> ${r.action}`);
+      }catch(e){ showMsg('请求失败'); }
+    });
+
+    document.getElementById('setGateway').addEventListener('click', ()=>{
+      const v = document.getElementById('gatewayUrl').value.trim();
+      gatewayBase = v;
+      document.getElementById('currentTarget').textContent = gatewayBase ? ('目标：' + gatewayBase) : '目标：本地 demo';
+      // 如果选择 proxy 模式，保存运行时配置到上位机服务
+      if (accessMode === 'proxy'){
+        const config = {
+          remoteRelayUrl: gatewayBase && gatewayBase.startsWith('http') ? gatewayBase : '',
+          remoteRelaySsh: gatewayBase && !gatewayBase.startsWith('http') ? gatewayBase : '',
+          remoteRelaySshKey: document.getElementById('proxySshKey').value.trim(),
+          relayProxyToken: document.getElementById('proxyToken').value.trim()
+        };
+        fetch('/api/relay/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config) })
+          .then(()=> load())
+          .catch(()=> load());
+        return;
+      }
+      load();
+    });
+
+    document.getElementById('accessMode').addEventListener('change', (e)=>{
+      accessMode = e.target.value;
+      document.getElementById('proxyToken').style.display = accessMode === 'proxy' ? 'inline-block' : 'none';
+      document.getElementById('proxySshKey').style.display = accessMode === 'proxy' ? 'inline-block' : 'none';
+      if (accessMode === 'demo') document.getElementById('currentTarget').textContent = '目标：本地 demo';
+      else if (accessMode === 'direct' && gatewayBase) document.getElementById('currentTarget').textContent = '目标：' + gatewayBase;
+      else if (accessMode === 'proxy') document.getElementById('currentTarget').textContent = '目标：proxy (/api/relay/proxy)';
+      load();
+    });
+
+    // 初始化：尝试读取运行时配置
+    fetch('/api/relay/config').then(r=>r.json()).then(cfg=>{
+      if (cfg){
+        if (cfg.remoteRelayUrl) { document.getElementById('gatewayUrl').value = cfg.remoteRelayUrl; gatewayBase = cfg.remoteRelayUrl; accessMode = 'proxy'; document.getElementById('accessMode').value = 'proxy'; }
+        else if (cfg.remoteRelaySsh) { document.getElementById('gatewayUrl').value = cfg.remoteRelaySsh; gatewayBase = cfg.remoteRelaySsh; accessMode = 'proxy'; document.getElementById('accessMode').value = 'proxy'; }
+        if (cfg.relayProxyToken) document.getElementById('proxyToken').value = cfg.relayProxyToken;
+        if (cfg.remoteRelaySshKey) document.getElementById('proxySshKey').value = cfg.remoteRelaySshKey;
+      }
+    }).catch(()=>{}).finally(()=>{ load(); });
+  </script>
+</body>
+</html>
