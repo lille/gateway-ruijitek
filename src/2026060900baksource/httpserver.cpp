@@ -474,7 +474,6 @@ QByteArray HttpServer::configPageHtml() const
   <script>
     let configState = null;
     let activeIndex = 0;
-    let previewTemplate = '';
 
     function byId(id) { return document.getElementById(id); }
     function setLog(text, bad) {
@@ -485,68 +484,41 @@ QByteArray HttpServer::configPageHtml() const
 
     function templateDefaults(templateName) {
       const map = {
-        'EX-TH-01': { id: 'DEV-2004', name: '防爆环境温湿度传感器', startAddress: 1, registerCount: 7, slaveId: 3 },
-        'WATER-DETECT': { id: 'DEV-2005', name: '水侵传感器', startAddress: 0, registerCount: 1, slaveId: 1 },
-        'ZH-Q006': { id: 'DEV-2001', name: 'ZH-Q006 空气质量传感器', startAddress: 0, registerCount: 9, slaveId: 2 }
+        'EX-TH-01': { id: 'DEV-2004', name: '防爆环境温湿度传感器', registerCount: 7 },
+        'WATER-DETECT': { id: 'DEV-2005', name: '水侵传感器', registerCount: 1 },
+        'ZH-Q006': { id: 'DEV-2001', name: 'ZH-Q006 空气质量传感器', registerCount: 9 }
       };
       return map[templateName] || null;
     }
 
-    function applyTemplateFields(templateName) {
-      const info = templateDefaults(templateName);
-      if (!info) {
-        return null;
-      }
-      byId('templateName').value = templateName;
-      byId('deviceId').value = info.id;
-      byId('deviceName').value = info.name;
-      byId('protocol').value = 'modbus-rtu';
-      byId('startAddress').value = info.startAddress;
-      byId('registerCount').value = info.registerCount;
-      byId('slaveId').value = info.slaveId;
-      return info;
-    }
-
     function currentDeviceId() {
-      const info = templateDefaults(previewTemplate || byId('templateName').value || '');
-      if (info) {
-        return info.id;
-      }
       return (byId('deviceId').value || '').trim()
         || (configState.devices[activeIndex] || {}).id
         || '';
     }
 
-    function loadDeviceContext(index) {
-      const device = (configState.devices || [])[index] || {};
-      const serial = device.serial || {};
-      byId('gatewayId').value = device.gatewayId || '';
-      byId('location').value = device.location || '';
-      byId('intervalMs').value = device.intervalMs ?? 1000;
-      byId('serialPort').value = serial.port || 'auto';
-      byId('baudRate').value = serial.baudRate ?? 9600;
-      byId('serialSimulate').value = String(serial.simulate ?? true);
-    }
-
     function applyTemplateSelection(templateName) {
-      previewTemplate = templateName || '';
-      const info = applyTemplateFields(templateName);
-      if (!info) {
-        renderRealtime().catch(() => {});
-        return;
+      const info = templateDefaults(templateName);
+      if (info) {
+        byId('deviceId').value = info.id;
+        byId('deviceName').value = info.name;
+        byId('protocol').value = 'modbus-rtu';
+        byId('startAddress').value = 0;
+        byId('registerCount').value = info.registerCount;
       }
 
-      if (Array.isArray(configState.devices)) {
-        let idx = configState.devices.findIndex((d) => d.id === info.id);
-        if (idx < 0) {
-          idx = configState.devices.findIndex((d) => d.templateName === templateName);
-        }
+      if (info && Array.isArray(configState.devices)) {
+        const idx = configState.devices.findIndex((d) => d.id === info.id);
         if (idx >= 0) {
           activeIndex = idx;
           renderDeviceList();
-          loadDeviceContext(idx);
-          applyTemplateFields(templateName);
+          fillForm();
         }
+      }
+
+      if (!info || !Array.isArray(configState.devices)
+          || configState.devices.findIndex((d) => d.id === info.id) < 0) {
+        byId('templateName').value = templateName;
       }
 
       renderRealtime().catch(() => {});
@@ -565,10 +537,8 @@ QByteArray HttpServer::configPageHtml() const
       Array.from(document.querySelectorAll('.device-item')).forEach((item) => {
         item.addEventListener('click', () => {
           activeIndex = Number(item.dataset.index || 0);
-          previewTemplate = '';
           renderDeviceList();
           fillForm();
-          previewTemplate = byId('templateName').value || '';
           renderRealtime().catch(() => {});
         });
       });
@@ -592,8 +562,7 @@ QByteArray HttpServer::configPageHtml() const
       const isExTh = deviceId === 'DEV-2004' || templateName === 'EX-TH-01';
 
       if (isWater) {
-        const rawValue = points[0]?.value || 0;
-        const value = Math.round(rawValue);
+        const value = points[0]?.value || 0;
         const isWaterDetected = value > 256;
         if (isWaterDetected) {
           fetch('/api/relay', {
@@ -677,9 +646,9 @@ QByteArray HttpServer::configPageHtml() const
       byId('protocol').value = device.protocol || 'modbus-rtu';
       byId('location').value = device.location || '';
       byId('intervalMs').value = device.intervalMs ?? 1000;
-      byId('slaveId').value = defaults ? defaults.slaveId : (device.slaveId ?? 1);
+      byId('slaveId').value = device.slaveId ?? 1;
       if (templateName === 'EX-TH-01') {
-        byId('startAddress').value = device.startAddress ?? 1;
+        byId('startAddress').value = device.startAddress ?? 0;
         byId('registerCount').value = device.registerCount ?? 7;
       } else if (templateName === 'WATER-DETECT') {
         byId('startAddress').value = device.startAddress ?? 0;
@@ -762,16 +731,16 @@ QByteArray HttpServer::configPageHtml() const
         device.protocol = 'modbus-rtu';
         device.startAddress = 0;
         device.registerCount = 9;
-        device.slaveId = Number(byId('slaveId').value || 2);
+        device.slaveId = Number(byId('slaveId').value || 1);
         device.serial.baudRate = 9600;
         device.alarmThresholds = device.alarmThresholds || {};
       } else if (device.templateName === 'EX-TH-01') {
         device.id = 'DEV-2004';
         device.name = '防爆环境温湿度传感器';
         device.protocol = 'modbus-rtu';
-        device.startAddress = 1;
+        device.startAddress = 0;
         device.registerCount = 7;
-        device.slaveId = Number(byId('slaveId').value || 3);
+        device.slaveId = Number(byId('slaveId').value || 1);
         device.serial.baudRate = 9600;
         device.alarmThresholds = device.alarmThresholds || {};
       } else if (device.templateName === 'WATER-DETECT') {
@@ -800,7 +769,6 @@ QByteArray HttpServer::configPageHtml() const
       activeIndex = Math.min(activeIndex, Math.max(configState.devices.length - 1, 0));
       renderDeviceList();
       fillForm();
-      previewTemplate = byId('templateName').value || '';
       await renderRealtime();
       setLog('配置已加载，可以直接修改并保存。', false);
     }
@@ -821,7 +789,6 @@ QByteArray HttpServer::configPageHtml() const
         configState = next;
         renderDeviceList();
         fillForm();
-        previewTemplate = byId('templateName').value || '';
         await renderRealtime();
         setLog('保存成功，网关采集器已按新配置重载。', false);
       } catch (error) {

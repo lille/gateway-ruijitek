@@ -24,8 +24,6 @@ public:
 
     void start();
 
-    static void resetSharedRtuBuses();
-
 signals:
     void deviceSampled(const QString &deviceId);
 

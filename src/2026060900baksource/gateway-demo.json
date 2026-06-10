@@ -26,7 +26,7 @@
       "protocol": "modbus-rtu",
       "location": "现场A区",
       "intervalMs": 1000,
-      "slaveId": 2,
+      "slaveId": 1,
       "startAddress": 0,
       "registerCount": 9,
       "baseTemperature": 24.6,
@@ -90,7 +90,7 @@
       "location": "现场D区",
       "intervalMs": 1000,
       "slaveId": 3,
-      "startAddress": 1,
+      "startAddress": 0,
       "registerCount": 7,
       "serial": {
         "simulate": false,

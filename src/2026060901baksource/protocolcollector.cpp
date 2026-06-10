@@ -14,6 +14,9 @@
 #include <QSerialPort>
 #include <QSerialPortInfo>
 #include <QTcpSocket>
+#include <QHash>
+#include <QMutex>
+#include <QThread>
 #include <QVector>
 #include <QFile>
 
@@ -47,11 +50,30 @@ const DataPoint *findPoint(const QList<DataPoint> &points, const QString &id)
     return nullptr;
 }
 
+QString normalizeSerialPortName(const QString &configured)
+{
+    QString port = configured.trimmed();
+    if (port.isEmpty()) {
+        return port;
+    }
+
+#if defined(Q_OS_LINUX) || defined(Q_OS_UNIX)
+    if (!port.startsWith(QStringLiteral("/dev/"))
+        && (port.startsWith(QStringLiteral("tty"), Qt::CaseInsensitive)
+            || port.startsWith(QStringLiteral("ttyUSB"), Qt::CaseInsensitive)
+            || port.startsWith(QStringLiteral("ttyACM"), Qt::CaseInsensitive))) {
+        port.prepend(QStringLiteral("/dev/"));
+    }
+#endif
+
+    return port;
+}
+
 QString resolveSerialPortName(const QJsonObject &serialConfig)
 {
     const QString configured = serialConfig.value(QStringLiteral("port")).toString().trimmed();
     if (!configured.isEmpty() && configured.compare(QStringLiteral("auto"), Qt::CaseInsensitive) != 0) {
-        return configured;
+        return normalizeSerialPortName(configured);
     }
 
     const QList<QSerialPortInfo> ports = QSerialPortInfo::availablePorts();
@@ -66,12 +88,225 @@ QString resolveSerialPortName(const QJsonObject &serialConfig)
 
     return ports.isEmpty() ? QString() : ports.first().systemLocation();
 }
+
+QString rtuPortKey(const QJsonObject &serialConfig)
+{
+    const QString port = resolveSerialPortName(serialConfig);
+    if (port.isEmpty()) {
+        return QString();
+    }
+
+    return QStringLiteral("%1|%2|%3|%4")
+        .arg(port)
+        .arg(serialConfig.value(QStringLiteral("baudRate")).toInt(9600))
+        .arg(serialConfig.value(QStringLiteral("dataBits")).toInt(8))
+        .arg(serialConfig.value(QStringLiteral("parity")).toString(QStringLiteral("N")));
+}
+
+struct SharedRtuBus {
+    QModbusRtuSerialMaster *client = nullptr;
+    QMutex mutex;
+};
+
+QHash<QString, SharedRtuBus *> g_rtuBuses;
+
+QModbusRtuSerialMaster *createRtuClient(const QJsonObject &serialConfig)
+{
+    auto *client = new QModbusRtuSerialMaster();
+    client->setConnectionParameter(QModbusDevice::SerialPortNameParameter,
+                                   resolveSerialPortName(serialConfig));
+    client->setConnectionParameter(QModbusDevice::SerialParityParameter,
+                                   serialConfig.value(QStringLiteral("parity")).toString(QStringLiteral("N")) == QStringLiteral("E")
+                                       ? QSerialPort::EvenParity
+                                       : QSerialPort::NoParity);
+    client->setConnectionParameter(QModbusDevice::SerialBaudRateParameter,
+                                   serialConfig.value(QStringLiteral("baudRate")).toInt(9600));
+    client->setConnectionParameter(QModbusDevice::SerialDataBitsParameter,
+                                   serialConfig.value(QStringLiteral("dataBits")).toInt(8));
+    client->setConnectionParameter(QModbusDevice::SerialStopBitsParameter,
+                                   serialConfig.value(QStringLiteral("stopBits")).toInt(1) == 2
+                                       ? QSerialPort::TwoStop
+                                       : QSerialPort::OneStop);
+    client->setTimeout(2000);
+    client->setNumberOfRetries(2);
+    return client;
+}
+
+SharedRtuBus *busForPort(const QJsonObject &serialConfig)
+{
+    const QString key = rtuPortKey(serialConfig);
+    if (key.isEmpty()) {
+        return nullptr;
+    }
+
+    SharedRtuBus *&bus = g_rtuBuses[key];
+    if (!bus) {
+        bus = new SharedRtuBus();
+    }
+    return bus;
+}
+
+QModbusRtuSerialMaster *ensureRtuClient(SharedRtuBus *bus, const QJsonObject &serialConfig)
+{
+    if (!bus) {
+        return nullptr;
+    }
+
+    if (!bus->client) {
+        bus->client = createRtuClient(serialConfig);
+    }
+
+    if (bus->client->state() != QModbusDevice::ConnectedState && !bus->client->connectDevice()) {
+        bus->client->disconnectDevice();
+        delete bus->client;
+        bus->client = createRtuClient(serialConfig);
+        if (!bus->client->connectDevice()) {
+            delete bus->client;
+            bus->client = nullptr;
+            return nullptr;
+        }
+    }
+
+    return bus->client;
+}
+
+QVector<quint16> readHoldingRegisters(QModbusRtuSerialMaster *client,
+                                      int slaveId,
+                                      int startAddress,
+                                      int registerCount,
+                                      QString *errorMessage)
+{
+    QModbusReply *reply = client->sendReadRequest(
+        QModbusDataUnit(QModbusDataUnit::HoldingRegisters, startAddress, registerCount),
+        static_cast<quint8>(slaveId));
+    if (!reply) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("rtu-read-failed");
+        }
+        return {};
+    }
+
+    QEventLoop loop;
+    connect(reply, &QModbusReply::finished, &loop, &QEventLoop::quit);
+    loop.exec();
+
+    QVector<quint16> registers;
+    if (reply->error() == QModbusDevice::NoError) {
+        const QModbusDataUnit unit = reply->result();
+        registers.reserve(static_cast<int>(unit.valueCount()));
+        for (uint i = 0; i < unit.valueCount(); ++i) {
+            registers.append(unit.value(i));
+        }
+    } else if (errorMessage) {
+        *errorMessage = reply->errorString();
+    }
+
+    reply->deleteLater();
+    return registers;
+}
+
+QVector<quint16> readHoldingRegistersOnBus(const QJsonObject &serialConfig,
+                                           int slaveId,
+                                           int startAddress,
+                                           int registerCount,
+                                           QString *errorMessage)
+{
+    SharedRtuBus *bus = busForPort(serialConfig);
+    if (!bus) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("rtu-no-port");
+        }
+        return {};
+    }
+
+    QMutexLocker locker(&bus->mutex);
+    QModbusRtuSerialMaster *client = ensureRtuClient(bus, serialConfig);
+    if (!client) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("rtu-disconnected");
+        }
+        return {};
+    }
+
+    QThread::msleep(30);
+    return readHoldingRegisters(client, slaveId, startAddress, registerCount, errorMessage);
+}
+
+QVector<quint16> mergeExTh01Registers(quint16 slaveId,
+                                      const QVector<quint16> &addressReg,
+                                      const QVector<quint16> &statusReg,
+                                      const QVector<quint16> &dataRegs)
+{
+    if (statusReg.isEmpty() || dataRegs.size() < 5) {
+        return {};
+    }
+
+    QVector<quint16> merged(7);
+    merged[0] = addressReg.isEmpty() ? slaveId : addressReg.at(0);
+    merged[1] = statusReg.at(0);
+    for (int i = 0; i < 5; ++i) {
+        merged[2 + i] = dataRegs.at(i);
+    }
+    return merged;
+}
+
+QVector<quint16> readExTh01Registers(const QJsonObject &serialConfig, int slaveId, QString *errorMessage)
+{
+    QString lastError;
+    for (const int startAddress : {1, 0}) {
+        const QVector<quint16> block = readHoldingRegistersOnBus(serialConfig, slaveId, startAddress, 7, &lastError);
+        if (block.size() >= 7) {
+            return block;
+        }
+    }
+
+    QString splitError;
+    for (const int baseAddress : {1, 0}) {
+        const QVector<quint16> addressReg = readHoldingRegistersOnBus(serialConfig, slaveId, baseAddress, 1, &splitError);
+        const QVector<quint16> statusReg = readHoldingRegistersOnBus(serialConfig, slaveId, baseAddress + 1, 1, &splitError);
+        const QVector<quint16> dataRegs = readHoldingRegistersOnBus(serialConfig, slaveId, baseAddress + 2, 5, &splitError);
+        const QVector<quint16> merged = mergeExTh01Registers(static_cast<quint16>(slaveId), addressReg, statusReg, dataRegs);
+        if (!merged.isEmpty()) {
+            return merged;
+        }
+    }
+
+    if (errorMessage) {
+        *errorMessage = lastError.isEmpty() ? splitError : lastError;
+        if (errorMessage->isEmpty()) {
+            *errorMessage = QStringLiteral("rtu-read-failed");
+        }
+    }
+    return {};
+}
+}
+
+void ProtocolCollector::resetSharedRtuBuses()
+{
+    for (SharedRtuBus *bus : g_rtuBuses) {
+        if (!bus) {
+            continue;
+        }
+        if (bus->client) {
+            if (bus->client->state() != QModbusDevice::UnconnectedState) {
+                bus->client->disconnectDevice();
+            }
+            delete bus->client;
+            bus->client = nullptr;
+        }
+        delete bus;
+    }
+    g_rtuBuses.clear();
 }
 
 void ProtocolCollector::start()
 {
-    poll();
-    m_timer.start();
+    const QString deviceId = m_deviceConfig.value(QStringLiteral("id")).toString();
+    const int phaseMs = static_cast<int>(qHash(deviceId) % 300U);
+    QTimer::singleShot(phaseMs, this, [this]() {
+        poll();
+        m_timer.start();
+    });
 }
 
 void ProtocolCollector::poll()
@@ -116,16 +351,19 @@ QList<DataPoint> ProtocolCollector::simulatePoints() const
 
     if (useExTh01Template()) {
         return {
-            {QStringLiteral("temperature"), QStringLiteral("温度"), QStringLiteral("℃"), baseTemp + jitter(0.0, 2.0), QStringLiteral("good"), now},
-            {QStringLiteral("humidity"), QStringLiteral("湿度"), QStringLiteral("%RH"), baseHumidity + jitter(0.0, 5.0), QStringLiteral("good"), now},
-            {QStringLiteral("status"), QStringLiteral("状态"), QStringLiteral(""), 0.0, QStringLiteral("good"), now},
-            {QStringLiteral("reserved"), QStringLiteral("保留"), QStringLiteral(""), 0.0, QStringLiteral("good"), now}
+            {QStringLiteral("device_address"), QStringLiteral("设备地址"), QStringLiteral(""), 3.0, QStringLiteral("good"), now},
+            {QStringLiteral("alarm_status"), QStringLiteral("报警器状态"), QStringLiteral(""), 0.0, QStringLiteral("good"), now},
+            {QStringLiteral("concentration"), QStringLiteral("浓度实时值"), QStringLiteral("PPM"), 12.5 + jitter(0.0, 3.0), QStringLiteral("good"), now},
+            {QStringLiteral("precision"), QStringLiteral("精度"), QStringLiteral(""), 1.0, QStringLiteral("good"), now},
+            {QStringLiteral("gas_type"), QStringLiteral("气体类型"), QStringLiteral(""), 0.0, QStringLiteral("good"), now}
         };
     }
 
     if (useWaterDetectTemplate()) {
+        const bool alarm = m_deviceConfig.value(QStringLiteral("simulateWaterAlarm")).toBool(false);
+        const double value = alarm ? 257.0 : 0.0;
         return {
-            {QStringLiteral("water_level"), QStringLiteral("水侵检测"), QStringLiteral(""), 128.0 + jitter(-50.0, 50.0), QStringLiteral("good"), now}
+            {QStringLiteral("water_level"), QStringLiteral("水侵检测"), QStringLiteral(""), value, QStringLiteral("good"), now}
         };
     }
 
@@ -146,66 +384,39 @@ QList<DataPoint> ProtocolCollector::readModbusRtuPoints()
         return simulatePoints();
     }
 
-    if (!m_modbusClient) {
-        QModbusRtuSerialMaster *client = new QModbusRtuSerialMaster(this);
-        client->setConnectionParameter(QModbusDevice::SerialPortNameParameter, resolveSerialPortName(serial));
-        client->setConnectionParameter(QModbusDevice::SerialParityParameter, serial.value(QStringLiteral("parity")).toString(QStringLiteral("N")) == QStringLiteral("E")
-                                       ? QSerialPort::EvenParity : QSerialPort::NoParity);
-        client->setConnectionParameter(QModbusDevice::SerialBaudRateParameter, serial.value(QStringLiteral("baudRate")).toInt(9600));
-        client->setConnectionParameter(QModbusDevice::SerialDataBitsParameter, serial.value(QStringLiteral("dataBits")).toInt(8));
-        client->setConnectionParameter(QModbusDevice::SerialStopBitsParameter, serial.value(QStringLiteral("stopBits")).toInt(1) == 2
-                                       ? QSerialPort::TwoStop : QSerialPort::OneStop);
-        client->setTimeout(800);
-        client->setNumberOfRetries(1);
-        m_modbusClient = client;
-    }
-
-    if (m_modbusClient->state() != QModbusDevice::ConnectedState && !m_modbusClient->connectDevice()) {
-        return fallbackPoints(QStringLiteral("rtu-disconnected"));
-    }
-
     const int slaveId = m_deviceConfig.value(QStringLiteral("slaveId")).toInt(1);
     const int startAddress = m_deviceConfig.value(QStringLiteral("startAddress")).toInt(0);
     const int registerCount = m_deviceConfig.value(QStringLiteral("registerCount")).toInt(2);
-    QModbusReply *reply = m_modbusClient->sendReadRequest(QModbusDataUnit(QModbusDataUnit::HoldingRegisters, startAddress, registerCount), slaveId);
-    if (!reply) {
-        return fallbackPoints(QStringLiteral("rtu-read-failed"));
-    }
 
-    QEventLoop loop;
-    connect(reply, &QModbusReply::finished, &loop, &QEventLoop::quit);
-    loop.exec();
-
-    QList<DataPoint> points;
-    const QDateTime now = QDateTime::currentDateTime();
-    if (reply->error() == QModbusDevice::NoError) {
-        const QModbusDataUnit unit = reply->result();
-        QVector<quint16> registers;
-        registers.reserve(static_cast<int>(unit.valueCount()));
-        for (uint i = 0; i < unit.valueCount(); ++i) {
-            registers.append(unit.value(i));
-        }
-        
-        if (useZhQ006Template()) {
-            points = decodeZhQ006Points(registers, now);
-        } else if (useExTh01Template()) {
-            points = decodeExTh01Points(registers, now);
-        } else if (useWaterDetectTemplate()) {
-            points = decodeWaterDetectPoints(registers, now);
-        } else {
-            const double temperature = unit.valueCount() > 0 ? unit.value(0) / 10.0 : 0.0;
-            const double humidity = unit.valueCount() > 1 ? unit.value(1) / 10.0 : 0.0;
-            points = {
-                {QStringLiteral("temperature"), QStringLiteral("温度"), QStringLiteral("℃"), temperature, QStringLiteral("good"), now},
-                {QStringLiteral("humidity"), QStringLiteral("湿度"), QStringLiteral("%RH"), humidity, QStringLiteral("good"), now}
-            };
-        }
+    QString readError;
+    QVector<quint16> registers;
+    if (useExTh01Template()) {
+        registers = readExTh01Registers(serial, slaveId, &readError);
     } else {
-        points = fallbackPoints(reply->errorString());
+        registers = readHoldingRegistersOnBus(serial, slaveId, startAddress, registerCount, &readError);
     }
 
-    reply->deleteLater();
-    return points;
+    if (registers.isEmpty()) {
+        return fallbackPoints(readError.isEmpty() ? QStringLiteral("rtu-read-failed") : readError);
+    }
+
+    const QDateTime now = QDateTime::currentDateTime();
+    if (useZhQ006Template()) {
+        return decodeZhQ006Points(registers, now);
+    }
+    if (useExTh01Template()) {
+        return decodeExTh01Points(registers, now);
+    }
+    if (useWaterDetectTemplate()) {
+        return decodeWaterDetectPoints(registers, now);
+    }
+
+    const double temperature = registers.size() > 0 ? registers.at(0) / 10.0 : 0.0;
+    const double humidity = registers.size() > 1 ? registers.at(1) / 10.0 : 0.0;
+    return {
+        {QStringLiteral("temperature"), QStringLiteral("温度"), QStringLiteral("℃"), temperature, QStringLiteral("good"), now},
+        {QStringLiteral("humidity"), QStringLiteral("湿度"), QStringLiteral("%RH"), humidity, QStringLiteral("good"), now}
+    };
 }
 
 QList<DataPoint> ProtocolCollector::readModbusTcpPoints()
@@ -442,7 +653,7 @@ void ProtocolCollector::publishPoints(const QList<DataPoint> &points)
     if (deviceId == QStringLiteral("DEV-2005")) {
         static bool waterRelayClosed = false;
         const DataPoint *waterPoint = points.isEmpty() ? nullptr : &points.first();
-        if (waterPoint && waterPoint->value > 256.0) {
+        if (waterPoint && static_cast<int>(waterPoint->value) > 256) {
             if (!waterRelayClosed) {
                 controlRelay(QStringLiteral("500"), QStringLiteral("off"));
                 waterRelayClosed = true;
@@ -477,8 +688,9 @@ QList<DataPoint> ProtocolCollector::decodeZhQ006Points(const QVector<quint16> &r
 bool ProtocolCollector::useZhQ006Template() const
 {
     const QString templateName = m_deviceConfig.value(QStringLiteral("templateName")).toString();
+    const QString deviceId = m_deviceConfig.value(QStringLiteral("id")).toString();
     return templateName.contains(QStringLiteral("ZH-Q006"), Qt::CaseInsensitive)
-        || m_deviceConfig.value(QStringLiteral("registerCount")).toInt() >= 9;
+        || deviceId == QStringLiteral("DEV-2001");
 }
 
 bool ProtocolCollector::useExTh01Template() const
@@ -495,17 +707,51 @@ bool ProtocolCollector::useWaterDetectTemplate() const
         || m_deviceConfig.value(QStringLiteral("id")).toString() == QStringLiteral("DEV-2005");
 }
 
+namespace {
+QString exTh01UnitText(quint16 code)
+{
+    switch (code) {
+    case 0: return QStringLiteral("%VOL");
+    case 1: return QStringLiteral("%LEL");
+    case 2: return QStringLiteral("PPM");
+    default: return QStringLiteral("");
+    }
+}
+
+double exTh01PrecisionDivisor(quint16 code)
+{
+    switch (code) {
+    case 1: return 10.0;
+    case 2: return 100.0;
+    case 3: return 1000.0;
+    default: return 1.0;
+    }
+}
+}
+
 QList<DataPoint> ProtocolCollector::decodeExTh01Points(const QVector<quint16> &registers, const QDateTime &timestamp) const
 {
     auto readAt = [&registers](int index) -> quint16 {
         return (index >= 0 && index < registers.size()) ? registers.at(index) : 0;
     };
 
+    const quint16 highReg = readAt(2);
+    const quint16 lowReg = readAt(3);
+    quint32 rawConcentration = 0;
+    if (highReg <= 0xFF) {
+        rawConcentration = static_cast<quint32>(highReg) * 256U + static_cast<quint32>(lowReg & 0xFF);
+    } else {
+        rawConcentration = (static_cast<quint32>(highReg) << 16) | static_cast<quint32>(lowReg);
+    }
+    const quint16 precisionCode = readAt(4);
+    const double concentration = static_cast<double>(rawConcentration) / exTh01PrecisionDivisor(precisionCode);
+
     return {
-        {QStringLiteral("temperature"), QStringLiteral("温度"), QStringLiteral("℃"), static_cast<double>(readAt(0)) / 10.0, QStringLiteral("good"), timestamp},
-        {QStringLiteral("humidity"), QStringLiteral("湿度"), QStringLiteral("%RH"), static_cast<double>(readAt(1)) / 10.0, QStringLiteral("good"), timestamp},
-        {QStringLiteral("status"), QStringLiteral("状态"), QStringLiteral(""), static_cast<double>(readAt(2)), QStringLiteral("good"), timestamp},
-        {QStringLiteral("reserved"), QStringLiteral("保留"), QStringLiteral(""), static_cast<double>(readAt(3)), QStringLiteral("good"), timestamp}
+        {QStringLiteral("device_address"), QStringLiteral("设备地址"), QStringLiteral(""), static_cast<double>(readAt(0)), QStringLiteral("good"), timestamp},
+        {QStringLiteral("alarm_status"), QStringLiteral("报警器状态"), QStringLiteral(""), static_cast<double>(readAt(1)), QStringLiteral("good"), timestamp},
+        {QStringLiteral("concentration"), QStringLiteral("浓度实时值"), exTh01UnitText(readAt(5)), concentration, QStringLiteral("good"), timestamp},
+        {QStringLiteral("precision"), QStringLiteral("精度"), QStringLiteral(""), static_cast<double>(precisionCode), QStringLiteral("good"), timestamp},
+        {QStringLiteral("gas_type"), QStringLiteral("气体类型"), QStringLiteral(""), static_cast<double>(readAt(6)), QStringLiteral("good"), timestamp}
     };
 }
 

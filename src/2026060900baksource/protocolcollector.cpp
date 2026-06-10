@@ -116,10 +116,11 @@ QList<DataPoint> ProtocolCollector::simulatePoints() const
 
     if (useExTh01Template()) {
         return {
-            {QStringLiteral("temperature"), QStringLiteral("温度"), QStringLiteral("℃"), baseTemp + jitter(0.0, 2.0), QStringLiteral("good"), now},
-            {QStringLiteral("humidity"), QStringLiteral("湿度"), QStringLiteral("%RH"), baseHumidity + jitter(0.0, 5.0), QStringLiteral("good"), now},
-            {QStringLiteral("status"), QStringLiteral("状态"), QStringLiteral(""), 0.0, QStringLiteral("good"), now},
-            {QStringLiteral("reserved"), QStringLiteral("保留"), QStringLiteral(""), 0.0, QStringLiteral("good"), now}
+            {QStringLiteral("device_address"), QStringLiteral("设备地址"), QStringLiteral(""), 1.0, QStringLiteral("good"), now},
+            {QStringLiteral("alarm_status"), QStringLiteral("报警器状态"), QStringLiteral(""), 0.0, QStringLiteral("good"), now},
+            {QStringLiteral("concentration"), QStringLiteral("浓度实时值"), QStringLiteral("PPM"), 12.5 + jitter(0.0, 3.0), QStringLiteral("good"), now},
+            {QStringLiteral("precision"), QStringLiteral("精度"), QStringLiteral(""), 1.0, QStringLiteral("good"), now},
+            {QStringLiteral("gas_type"), QStringLiteral("气体类型"), QStringLiteral(""), 0.0, QStringLiteral("good"), now}
         };
     }
 
@@ -495,17 +496,44 @@ bool ProtocolCollector::useWaterDetectTemplate() const
         || m_deviceConfig.value(QStringLiteral("id")).toString() == QStringLiteral("DEV-2005");
 }
 
+namespace {
+QString exTh01UnitText(quint16 code)
+{
+    switch (code) {
+    case 0: return QStringLiteral("%VOL");
+    case 1: return QStringLiteral("%LEL");
+    case 2: return QStringLiteral("PPM");
+    default: return QStringLiteral("");
+    }
+}
+
+double exTh01PrecisionDivisor(quint16 code)
+{
+    switch (code) {
+    case 1: return 10.0;
+    case 2: return 100.0;
+    case 3: return 1000.0;
+    default: return 1.0;
+    }
+}
+}
+
 QList<DataPoint> ProtocolCollector::decodeExTh01Points(const QVector<quint16> &registers, const QDateTime &timestamp) const
 {
     auto readAt = [&registers](int index) -> quint16 {
         return (index >= 0 && index < registers.size()) ? registers.at(index) : 0;
     };
 
+    const quint32 rawConcentration = (static_cast<quint32>(readAt(2)) << 16) | readAt(3);
+    const quint16 precisionCode = readAt(4);
+    const double concentration = static_cast<double>(rawConcentration) / exTh01PrecisionDivisor(precisionCode);
+
     return {
-        {QStringLiteral("temperature"), QStringLiteral("温度"), QStringLiteral("℃"), static_cast<double>(readAt(0)) / 10.0, QStringLiteral("good"), timestamp},
-        {QStringLiteral("humidity"), QStringLiteral("湿度"), QStringLiteral("%RH"), static_cast<double>(readAt(1)) / 10.0, QStringLiteral("good"), timestamp},
-        {QStringLiteral("status"), QStringLiteral("状态"), QStringLiteral(""), static_cast<double>(readAt(2)), QStringLiteral("good"), timestamp},
-        {QStringLiteral("reserved"), QStringLiteral("保留"), QStringLiteral(""), static_cast<double>(readAt(3)), QStringLiteral("good"), timestamp}
+        {QStringLiteral("device_address"), QStringLiteral("设备地址"), QStringLiteral(""), static_cast<double>(readAt(0)), QStringLiteral("good"), timestamp},
+        {QStringLiteral("alarm_status"), QStringLiteral("报警器状态"), QStringLiteral(""), static_cast<double>(readAt(1)), QStringLiteral("good"), timestamp},
+        {QStringLiteral("concentration"), QStringLiteral("浓度实时值"), exTh01UnitText(readAt(5)), concentration, QStringLiteral("good"), timestamp},
+        {QStringLiteral("precision"), QStringLiteral("精度"), QStringLiteral(""), static_cast<double>(precisionCode), QStringLiteral("good"), timestamp},
+        {QStringLiteral("gas_type"), QStringLiteral("气体类型"), QStringLiteral(""), static_cast<double>(readAt(6)), QStringLiteral("good"), timestamp}
     };
 }
 
